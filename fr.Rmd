@@ -1,0 +1,345 @@
+---
+params: 
+  title: ""
+  publication_date: ""
+  doi: ""
+output: 
+  html_document:
+    anchor_sections: false
+    theme: null
+    highlight: null
+    mathjax: null
+    css: ["style.css", "https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700&display=swap"]
+    self_contained: true
+title: "`r params$title`"
+---
+
+```{r general-setup, include=FALSE}
+## This file contains the FRENCH version of the data story
+
+# Set general chunk options
+knitr::opts_chunk$set(
+  echo = FALSE, fig.showtext = TRUE, fig.retina = 3,
+  fig.align = "center", warning = FALSE, message = FALSE
+)
+
+# Install snf.datastory package if not available, otherwise load it
+if (!require("snf.datastory")) {
+  if (!require("devtools")) {
+    install.packages("devtools")
+    library(devtools)
+  }
+  install_github("snsf-data/snf.datastory")
+  library(snf.datastory)
+}
+
+# Load packages
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(conflicted)
+library(jsonlite)
+library(here)
+library(glue)
+library(ggiraph)
+
+# Conflict preferences
+conflict_prefer("filter", "dplyr")
+conflict_prefer("get_datastory_theme", "snf.datastory")
+conflict_prefer("get_datastory_scheme", "snf.datastory")
+
+# Increase showtext package font resolution
+showtext_opts(dpi = 320)
+
+# Set the locale for date formatting (Windows)
+Sys.setlocale("LC_TIME", "French")
+
+# Create function to print number with local language-specific format
+print_num <- function(x) snf.datastory::print_num(x, lang = "fr")
+
+# Knitr hook for local formatting of printed numbers
+knitr::knit_hooks$set(
+  inline <- function(x) {
+    if (!is.numeric(x)) {
+      x
+    } else {
+      print_num(x)
+    }
+  }
+)
+```
+
+```{r print-header-infos, results='asis'}
+# Add publication date to header
+cat(format(as_datetime(params$publication_date), "%d.%m.%Y"))
+
+# Register the Google font (same as Data Portal, is not loaded twice)
+cat(paste0(
+  "<link href='https://fonts.googleapis.com/css?family=",
+  "Source+Sans+Pro:400,700&display=swap' rel='stylesheet'>"
+))
+```
+
+```{r story-specific-setup, include=FALSE}
+# Set story-specific variables etc. here
+# Load the funding volume 1952-2021
+yearly_data_1952_2021 <- read_csv(here("data", "yearly_data_1952_2021.csv"))
+
+# Load the yearly research area shares 1952-2021
+yearly_shares_1952_2021 <- 
+  read_csv(here("data", "yearly_shares_1952_2021.csv")) %>% 
+  mutate(research_area = fct_relevel(research_area, c("SSH", "MINT", "LS", 
+                                                      "Interdisziplinär")))
+
+# Load the yearly gender shares 1991-2021
+yearly_gender_shares_1991_2021 <- 
+  read_csv(here("data", "yearly_gender_shares_1991_2021.csv"))
+```
+
+**Depuis 1952, le FNS finance des projets de recherche dans toutes les disciplines scientifiques. Comment le volume des subsides a-t-il évolué au fil des années ?**
+
+À ses débuts, le FNS disposait de quelques millions de francs pour soutenir la recherche en Suisse. Dix ans plus tard, en 1962, son budget d’encouragement s’élevait à environ 23 millions de francs, ce qui correspondrait à un peu moins d'une centaine de millions de francs aujourd’hui. Ses moyens ont ensuite pris de l’ampleur pour atteindre plus de 150 millions de francs en 1979 (soit 300 millions de nos jours). Durant la première moitié des années 1980, le montant des subsides alloués a stagné avant d’augmenter à nouveau pour atteindre environ 360 millions en 1996 (l’équivalent de quelque 400 millions aujourd’hui). Après une nouvelle stagnation jusqu’au début des années 2000, ses financements n’ont cessé d’augmenter de manière plus ou moins importante pour atteindre `r print_num(1152)` millions de francs en 2018, leur plus haut niveau historique.
+
+Notons ici que les attributions de subsides n’évoluent pas de manière linéaire au fil du temps mais connaissent des fluctuations, notamment dans le cadre des périodes de planification quadriennales et, plus particulièrement, pour certains instruments d’encouragement. Cela explique en grande partie le recul des subsides que l’on observe depuis 2018. Tous les chiffres indiqués comprennent les subsides attribués aux <a href="https://www.snf.ch/de/FJBJ8XGQ1tjG8J8w/foerderung/programme/nationale-forschungsschwerpunkte" target="_blank">Pôles de recherche nationaux (PRN)</a>.
+
+
+<div class="hide-mobile hide-tablet widemedia">
+
+<div class="plot-box">
+<div class="plot-title">Montant total des subsides (en millions de CHF)</div>
+
+```{r funding-volume-plot-desktop, out.width="100%", fig.height=4}
+# Function to draw the funding volume plot
+draw_plot_funding_volume <- function() {
+  # Create ggplot plot
+  ggplot_plot <- yearly_data_1952_2021 %>% 
+    ggplot(aes(x = year, 
+               y = amount / 1000000, 
+               tooltip = paste0(year, " : ", if_else(year <= 2001, 
+                                                    "env.", ""), 
+                                " ", round(amount / 1000000), 
+                                " millions de francs attribués"))) + 
+    geom_col_interactive(fill = get_datastory_scheme()[1]) + 
+    # scale_y_continuous(breaks = seq(0, 1300, 100), limits = c(0, 500)) +
+    # coord_flip() + 
+    labs(
+      # title = "Entwicklung des Fördervolumens", 
+      # subtitle = "Ohne Horizon Europe Übergangsmassnahmen", 
+      x = NULL, y = NULL) + 
+    get_datastory_theme()
+  
+  # Create ggiraph object
+  girafe(ggobj = ggplot_plot, 
+         height_svg = 4, 
+         options = list(
+           opts_toolbar(saveaspng = FALSE),
+           opts_hover(css = "fill:#F08262;stroke:#F08262;"),
+           opts_tooltip(
+             css = get_ggiraph_tooltip_css(),
+             opacity = 0.8,
+             delay_mouseover = 0,
+             delay_mouseout = 0
+           )
+         ))
+}
+
+# Draw the plot for desktop
+draw_plot_funding_volume()
+```
+
+<div class="caption">
+Les chiffres exacts sont disponibles dans les rapports annuels. Le graphique présente des valeurs nominales (inflation non prise en compte). Pour le classement annuel des données 2002-2021, on a utilisé (par ordre de disponibilité) : l’année de décision de la mise au concours, l’année de décision concernant la requête, l’année de soumission.
+</div>
+</div>
+</div>
+
+<div class="hide-desktop">
+
+<div class="plot-box">
+<div class="plot-title">Montant total des subsides (en millions de CHF)</div>
+
+```{r funding-volume-plot-mobile, out.width="100%", fig.height=4}
+# Draw the plot for mobile
+draw_plot_funding_volume()
+```
+
+<div class="caption">
+Les chiffres exacts sont disponibles dans les rapports annuels. Le graphique présente des valeurs nominales (inflation non prise en compte). Pour le classement annuel des données 2002-2021, on a utilisé (par ordre de disponibilité) : l’année de décision de la mise au concours, l’année de décision concernant la requête, l’année de soumission.
+</div>
+</div>
+</div>
+
+### Une répartition stable entre les différents domaines scientifiques depuis 1975
+
+Jusqu’en 1975, compte tenu de l’importance accordée à l’époque à la recherche sur l’atome et l’énergie, jusqu’à 73 % des subsides annuels étaient attribués au domaine des mathématiques, des mathématiques, sciences naturelles et de l'ingénieur (MINT). Par ailleurs, on note également le recul des fonds attribués aux sciences humaines et sociales qui sont passés d’un tiers à la création du FNS à moins de 10 % dans les années 1960.
+
+<div class="plot-box">
+
+<div class="plot-title">Pourcentage de subsides accordés par domaine scientifique</div>
+
+```{r example-plot-2, out.width="100%", fig.height=10}
+# Create ggplot plot
+ggplot_plot <- yearly_shares_1952_2021 %>% 
+  # Translate and order the research areas
+  mutate(research_area = case_when(
+    research_area == "SSH" ~ "SHS", 
+    research_area == "MINT" ~ "MINT", 
+    research_area == "LS" ~ "SV", 
+    research_area == "Interdisziplinär" ~ "Interdisciplinaire", 
+    TRUE ~ "UNKNOWN"
+  ), 
+   # Longer label for the plot tooltip
+  research_area_long = case_when(
+    research_area == "SHS" ~ 
+      "sciences humaines et sociales (SHS)", 
+    research_area == "MINT" ~ 
+      "mathématiques, sciences naturelles et de l'ingénieur (MINT)", 
+    research_area == "SV" ~ 
+      "sciences de la vie (SV)", 
+    research_area == "Interdisziplinär" ~ 
+      "Réseau de recherche interdisciplinaire", 
+    TRUE ~ "UNKNOWN"
+  ), 
+  research_area = fct_relevel(research_area, c("SHS", "MINT", "SV", 
+                                               "Interdisciplinaire"))) %>% 
+  # mutate(year = as_factor(year)) %>% 
+  ggplot(aes(x = year, 
+             y = perc, fill = fct_rev(research_area), 
+             tooltip = paste0(year, ": ", round(perc), 
+                              " % du volume de subsides en faveur de : ", 
+                              research_area_long))) + 
+  # Hack: Add a geom_col under the interactive one, only to be able to provide
+  # correct looking legend items (round although bar chart), 
+  # geom_col_interactive does not take the argument 'key_glyph'
+  geom_col(width = 0.1, size = 0.1,
+           # Draw point instead of square symbol
+           key_glyph = draw_key_dotplot) +
+  # Add ggiraph column, don't show it in legend as we're using points (and not 
+  # squares) according to the style guide there (see hack before)
+  geom_col_interactive(show.legend = FALSE) + 
+  geom_text(aes(label = paste0(round(perc), "%")), 
+            position = position_stack(vjust = 0.6), color = "white", 
+            size = 2.5, family = "Source Sans Pro") +
+  scale_x_reverse(breaks = c(seq(1952, 2012, 10), 2021)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1, scale = 1)) + 
+  coord_flip() + 
+  labs(
+    # title = "Granted amount per budget year and research area", 
+       # subtitle = "Horizon Europe Transitional Measures excluded", 
+       x = NULL, y = "Share of granted amount") + 
+  scale_fill_manual(values = rev(get_datastory_scheme(n_col = 4)), 
+                    guide = guide_legend(reverse = TRUE)) + 
+  get_datastory_theme()
+
+# Create ggiraph object
+girafe(ggobj = ggplot_plot, 
+       height_svg = 10, 
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F08262;stroke:white;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Les chiffres exacts sont disponibles dans les rapports annuels. Pour le classement annuel des données 2002-2021, on a utilisé (par ordre de disponibilité) : l’année de décision de la mise au concours, l’année de décision concernant la requête, l’année de soumission. Les chiffres ne comprennent pas les fonds attribués aux Pôles de recherche nationaux (PRN) et aux mesures transitoires pour Horizon 2020. C’est la discipline principale qui a été retenue comme critère déterminant pour le classement des subsides 2002-2021 par domaine scientifique.
+</div>
+
+Depuis 1975, les chiffres révèlent une répartition pour ainsi dire constante entre les mathématiques, les sciences naturelles et l’ingénierie (env. 40 %), les sciences de la vie (SV, env. 40 %) et les sciences humaines et sociales (20 %). Le nombre de subsides accordés à des projets relevant des sciences humaines et sociales est comparable à celui d’autres domaines scientifiques, mais son volume est moitié moins important car le montant moyen des subsides est inférieur. En 2016, le FNS a attribué pour la première fois de façon explicite des subsides à la recherche interdisciplinaire, ce qui a quelque peu réduit la part de subsides accordés aux mathématiques, sciences naturelles et de l'ingénieur et aux sciences de la vie.
+
+### Un soutien accru aux chercheuses
+
+Il ressort de la rétrospective que la part de chercheuses encouragées par le FNS est passée de 10 % en 1991 à plus d’un tiers en 2021. L’évolution est constante au fil du temps, sans qu’une année en particulier ne se démarque.
+
+<div class="plot-box">
+<div class="plot-title">Subsides approuvés – Pourcentage de requérantes et de requérants</div>
+
+```{r gender-grantee, out.width="100%", fig.height=6.5}
+# Create ggplot plot
+ggplot_plot <- yearly_gender_shares_1991_2021 %>%  
+  mutate(ResponsibleApplicantGender = 
+           if_else(ResponsibleApplicantGender == "f", 
+                   "Femme en tant que requérante responsable", 
+                   "Homme en tant que requérant responsable"), 
+          ResponsibleApplicantGender = fct_relevel(
+           ResponsibleApplicantGender, 
+           c("Femme en tant que requérante responsable", 
+             "Homme en tant que requérant responsable"))) %>% 
+  ggplot(aes(x = year, y = freq, fill = fct_rev(ResponsibleApplicantGender), 
+             tooltip = paste0(year, " - ", ResponsibleApplicantGender, " : ", 
+                              round(freq * 100), "%"))) + 
+  # Hack: Add a geom_col under the interactive one, only to be able to provide
+  # correct looking legend items (round although bar chart), 
+  # geom_col_interactive does not take the argument 'key_glyph'
+  geom_col(width = 0.1, size = 0.1,
+           # Draw point instead of square symbol
+           key_glyph = draw_key_dotplot) +
+  # Add ggiraph column, don't show it in legend as we're using points (and not 
+  # squares) according to the style guide there (see hack before)
+  geom_col_interactive(show.legend = FALSE) + 
+  labs(x = NULL, y = NULL) + 
+  geom_text(aes(label = paste0(round(freq * 100), "%")), 
+            position = position_stack(vjust = 0.6), color = "white", 
+            size = 2.5, family = "Source Sans Pro") +
+  scale_x_reverse(breaks = seq(1991, 2021, 2)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  scale_fill_manual(values = rev(get_datastory_scheme(n_col = 2)), 
+                    guide = guide_legend(reverse = TRUE)) + 
+  get_datastory_theme() + 
+  coord_flip()
+
+# Create ggiraph object
+girafe(ggobj = ggplot_plot, 
+       height_svg = 6.5, 
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F08262;stroke:white;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Pour le classement annuel des données 1991-2021, on a utilisé (par ordre de disponibilité) : l’année de décision de la mise au concours, l’année de décision concernant la requête, l’année de soumission. Les chiffres ne comprennent pas les fonds attribués aux Pôles de recherche nationaux (PRN) et aux mesures transitoires pour Horizon 2020. C’est la discipline principale qui a été retenue comme critère déterminant pour le classement des subsides 2002-2021 par domaine scientifique.
+</div>
+
+
+<div class="hide-mobile hide-tablet">
+<strong>Liens complémentaires</strong>
+<p>
+  <a href="https://www.snf.ch/fr/otHGxR771A58l7BM/news/depuis-70-ans-le-fns-soutient-les-chercheuses-et-chercheurs-et-investit-dans-leurs-idees" class="button-blue" target="_blank">Actualités sur le 70e anniversaire</a>
+  <a href="https://www.snf.ch/fr/SmhGfltIQkzzCxJc/page/apropos/portrait/historique" target="_blank" class="button">Histoire du FNS</a>
+</p>
+</div>
+
+<div class="hide-desktop">
+<strong>Liens complémentaires</strong>
+<p>
+  <a href="https://www.snf.ch/fr/otHGxR771A58l7BM/news/depuis-70-ans-le-fns-soutient-les-chercheuses-et-chercheurs-et-investit-dans-leurs-idees" class="button-blue" target="_blank">Actualités sur le 70e anniversaire</a><br/><br/>
+  <a href="https://www.snf.ch/fr/SmhGfltIQkzzCxJc/page/apropos/portrait/historique" target="_blank" class="button">Histoire du FNS</a>
+</p>
+</div>
+
+Les données, le texte et le code de ce récit de données sont <a href="https://github.com/snsf-data/70_years_snsf" target="_blank">disponibles sur Github</a> et <a href="https://doi.org/10.46446/datastory.70-years-snsf-from-a-few-million-to-a-billion" target="_blank">archivés sur Zenodo</a>. DOI: 10.46446/datastory.70-years-snsf-from-a-few-million-to-a-billion
+
+```{r prevent-internal-snsf-packages, include=FALSE}
+# Internal SNSF packages must not be used in data stories, as their
+# pre-processing functions are internal and the corporate design differs from
+# the data portal.
+if (any(c("snfverse", "snf.preprocessing", "snf.plot") %in% 
+        loadedNamespaces())) {
+  stop(glue(
+    "You must not use internal SNSF packages in data stories.",
+    " Please resort to snf.datastory."
+  ))
+}
+```

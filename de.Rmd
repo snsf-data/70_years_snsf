@@ -1,0 +1,338 @@
+---
+params: 
+  title: ""
+  publication_date: ""
+  doi: ""
+output: 
+  html_document:
+    anchor_sections: false
+    theme: null
+    highlight: null
+    mathjax: null
+    css: ["style.css", "https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700&display=swap"]
+    self_contained: true
+title: "`r params$title`"
+---
+
+
+```{r general-setup, include=FALSE}
+## This file contains the GERMAN version of the data story
+
+# Set general chunk options
+knitr::opts_chunk$set(echo = FALSE, fig.showtext = TRUE, fig.retina = 3, 
+                      fig.align = "center", warning = FALSE, message = FALSE)
+
+
+# Install snf.datastory package if not available, otherwise load it
+if (!require("snf.datastory")) {
+  if (!require("devtools")) {
+    install.packages("devtools")
+    library(devtools)
+  }
+  install_github("snsf-data/snf.datastory")
+  library(snf.datastory)
+}
+
+# Load packages
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(conflicted) 
+library(jsonlite)
+library(here)
+library(ggiraph)
+
+# Conflict preferences
+conflict_prefer("filter", "dplyr")
+conflict_prefer("get_datastory_theme", "snf.datastory")
+conflict_prefer("get_datastory_scheme", "snf.datastory")
+
+# Increase showtext package font resolution
+showtext_opts(dpi = 320)
+
+# Set the locale for date formatting (Windows)
+Sys.setlocale("LC_TIME", "German")
+
+# Create function to print number with local language-specific format 
+print_num <- function(x) snf.datastory::print_num(x, lang = "de")
+
+# Knitr hook for local formatting of printed numbers
+knitr::knit_hooks$set(
+  inline <- function(x) {
+    if (!is.numeric(x)) {
+      x
+    } else {
+      print_num(x)
+    }
+  }
+)
+```
+
+```{r print-header-infos, results='asis'}
+# Add publication date to header
+cat(format(as_datetime(params$publication_date), "%d.%m.%Y"))
+```
+
+```{r story-specific-setup, include=FALSE}
+# Set story-specific variables etc. here
+# Load the funding volume 1952-2021
+yearly_data_1952_2021 <- read_csv(here("data", "yearly_data_1952_2021.csv"))
+
+# Load the yearly research area shares 1952-2021
+yearly_shares_1952_2021 <- 
+  read_csv(here("data", "yearly_shares_1952_2021.csv")) %>% 
+  mutate(research_area = fct_relevel(research_area, c("SSH", "MINT", "LS", 
+                                                      "Interdisziplinär")))
+
+# Load the yearly gender shares 1991-2021
+yearly_gender_shares_1991_2021 <- 
+  read_csv(here("data", "yearly_gender_shares_1991_2021.csv"))
+```
+
+**Der SNF vergibt seit 1952 Beiträge an Forschungsprojekte in allen wissenschaftlichen Disziplinen. Wie hat sich das Fördervolumen während dieser Zeit entwickelt?**
+
+In den ersten Jahren seines Bestehens konnte der SNF die Forschenden in der Schweiz jeweils mit einigen Millionen Franken unterstützen. 1962, nach zehn Jahren, betrugen die Fördermittel rund 23 Millionen Franken, was knapp 100 Millionen heute entspricht. Danach stiegen sie bis 1979 auf über 150 Millionen (rund 300 Millionen heute). Während der ersten Hälfte der 80er-Jahre stagnierten die Beiträge, um dann bis 1996 auf rund 360 Millionen (rund 400 Millionen heute) anzusteigen. Nach einer erneuten Stagnation bis Anfang der 2000-er Jahre nahmen die Fördermittel mehr oder weniger stetig zu und erreichten 2018 einen bisherigen Höchststand von `r print_num(1152)` Millionen Franken. 
+
+Zu beachten ist, dass Zusprachen während der vierjährigen Planungsperioden und generell bei manchen Förderinstrumenten über die Jahre gesehen nicht linear verlaufen, sondern Schwankungen unterliegen. Dies erklärt auch weitgehend den Rückgang der Beiträge seit 2018. Alle angegebenen Zahlen beinhalten die Beiträge der <a href="https://www.snf.ch/de/FJBJ8XGQ1tjG8J8w/foerderung/programme/nationale-forschungsschwerpunkte" target="_blank">Nationalen Forschungsschwerpunkte (NFS)</a>.
+
+
+<div class="hide-mobile hide-tablet widemedia">
+
+<div class="plot-box">
+<div class="plot-title">Gesamtes Fördervolumen (in Mio. CHF)</div>
+
+```{r funding-volume-plot-desktop, out.width="100%", fig.height=4}
+# Function to draw the funding volume plot
+draw_plot_funding_volume <- function() {
+  # Create ggplot plot
+  ggplot_plot <- yearly_data_1952_2021 %>% 
+    ggplot(aes(x = year, 
+               y = amount / 1000000, 
+               tooltip = paste0(year, ": ", if_else(year <= 2001, 
+                                                    "ca.", ""), 
+                                " ", round(amount / 1000000), 
+                                " Mio. CHF gesprochen"))) + 
+    geom_col_interactive(fill = get_datastory_scheme()[1]) + 
+    # scale_y_continuous(breaks = seq(0, 1300, 100), limits = c(0, 500)) +
+    # coord_flip() + 
+    labs(
+      # title = "Entwicklung des Fördervolumens", 
+      # subtitle = "Ohne Horizon Europe Übergangsmassnahmen", 
+      x = NULL, y = NULL) + 
+    get_datastory_theme()
+  
+  # Create ggiraph object
+  girafe(ggobj = ggplot_plot, 
+         height_svg = 4, 
+         options = list(
+           opts_toolbar(saveaspng = FALSE),
+           opts_hover(css = "fill:#F08262;stroke:#F08262;"),
+           opts_tooltip(
+             css = get_ggiraph_tooltip_css(),
+             opacity = 0.8,
+             delay_mouseover = 0,
+             delay_mouseout = 0
+           )
+         ))
+}
+
+# Draw the plot for desktop
+draw_plot_funding_volume()
+```
+
+<div class="caption">
+Genaue Zahlen lassen sich den einzelnen Jahresberichten entnehmen. In der Darstellung werden nominale, nicht teuerungsbereinigte Zahlen dargestellt. Für die Jahreszuordnung der Daten 2002-2021 wurde (in Reihenfolge der Verfügbarkeit) verwendet: Jahr der Callentscheidung, Jahr des Gesuchentscheids, Jahr der Einreichung.
+</div>
+</div>
+</div>
+
+<div class="hide-desktop">
+
+<div class="plot-box">
+<div class="plot-title">Gesamtes Fördervolumen (in Mio. CHF)</div>
+
+```{r funding-volume-plot-mobile, out.width="100%", fig.height=4}
+# Draw the plot for mobile
+draw_plot_funding_volume()
+```
+
+<div class="caption">
+Genaue Zahlen lassen sich den einzelnen Jahresberichten entnehmen. In der Darstellung werden nominale, nicht teuerungsbereinigte Zahlen dargestellt. Für die Jahreszuordnung der Daten 2002-2021 wurde (in Reihenfolge der Verfügbarkeit) verwendet: Jahr der Callentscheidung, Jahr des Gesuchentscheids, Jahr der Einreichung.
+</div>
+</div>
+</div>
+
+### Stabile Verteilung auf die Wissenschaftsgebiete seit 1975  
+
+Bis 1975 dominierte, getrieben von der Atom- und Energieforschung, der Bereich Mathematik, Natur- und Ingenieurwissenschaften (MINT) mit bis zu 73% der jährlich gesprochenen Mittel. Bemerkenswert ist der Rückgang der Geistes- und Sozialwissenschaften (GSW) von der Gründungszeit bis in die 1960er-Jahre von rund einem Drittel auf unter 10%. 
+
+<div class="plot-box">
+
+<div class="plot-title">Bewilligte  Förderbeiträge nach Wissenschaftsgebiet in Prozenten</div>
+
+```{r example-plot-2, out.width="100%", fig.height=10}
+# Create ggplot plot
+ggplot_plot <- yearly_shares_1952_2021 %>% 
+  # Translate and order the research areas
+  mutate(research_area = case_when(
+    research_area == "SSH" ~ "GSW", 
+    research_area == "MINT" ~ "MINT", 
+    research_area == "LS" ~ "LW", 
+    research_area == "Interdisziplinär" ~ "Interdisziplinär", 
+    TRUE ~ "UNKNOWN"
+  ), 
+  # Longer label for the plot tooltip
+  research_area_long = case_when(
+    research_area == "GSW" ~ 
+      "Geistes- und Sozialwissenschaften (GSW)", 
+    research_area == "MINT" ~ 
+      "Mathematik, Natur- und Ingenieurwissenschaften (MINT)", 
+    research_area == "LW" ~ 
+      "Lebenswissenschaften (LW)", 
+    research_area == "Interdisziplinär" ~ 
+      "Interdisziplinäres Forschunggefäss", 
+    TRUE ~ "UNKNOWN"
+  ), 
+  research_area = fct_relevel(research_area, c("GSW", "MINT", "LW", 
+                                               "Interdisziplinär"))) %>% 
+  # mutate(year = as_factor(year)) %>% 
+  ggplot(aes(x = year, 
+             y = perc, fill = fct_rev(research_area), 
+             tooltip = paste0(year, ": ", round(perc), 
+                              "% des Fördervolumens an ", 
+                              research_area_long))) + 
+  # Hack: Add a geom_col under the interactive one, only to be able to provide
+  # correct looking legend items (round although bar chart), 
+  # geom_col_interactive does not take the argument 'key_glyph'
+  geom_col(width = 0.1, size = 0.1,
+           # Draw point instead of square symbol
+           key_glyph = draw_key_dotplot) +
+  # Add ggiraph column, don't show it in legend as we're using points (and not 
+  # squares) according to the style guide there (see hack before)
+  geom_col_interactive(show.legend = FALSE) + 
+  geom_text(aes(label = paste0(round(perc), "%")), 
+            position = position_stack(vjust = 0.6), color = "white", 
+            size = 2.5, family = "Source Sans Pro") +
+  scale_x_reverse(breaks = c(seq(1952, 2012, 10), 2021)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1, scale = 1)) + 
+  coord_flip() + 
+  labs(
+    # title = "Granted amount per budget year and research area", 
+       # subtitle = "Horizon Europe Transitional Measures excluded", 
+       x = NULL, y = "Share of granted amount") + 
+  scale_fill_manual(values = rev(get_datastory_scheme(n_col = 4)), 
+                    guide = guide_legend(reverse = TRUE)) + 
+  get_datastory_theme()
+
+# Create ggiraph object
+girafe(ggobj = ggplot_plot, 
+       height_svg = 10, 
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F08262;stroke:white;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Genaue Zahlen lassen sich den einzelnen Jahresberichten entnehmen. Für die Jahreszuordnung der Daten 2002-2021 wurde (in Reihenfolge der Verfügbarkeit) verwendet: Jahr der Callentscheidung, Jahr des Gesuchentscheids, Jahr der Einreichung. Die Zahlen sind exklusive Nationale Forschungsschwerpunkte (NFS) und Übergangsmassnahmen für Horizon 2020. Für die Zuordnung der Beiträge 2002-2021 zu den Wissenschaftsgebieten wurde die Hauptdisziplin verwendet.
+</div>
+
+Seit 1975 zeigen die Zahlen eine annährend konstante Aufteilung zwischen Mathematik, Natur- und Ingenieurwissenschaften (ca. 40%), Lebenswissenschaften (ca. 40%) und Geistes- und Sozialwissenschaften (20%). Die Zahl der Förderbeiträge bei den GSW ist zwar ähnlich hoch wie bei den anderen Wissenschaftsgebieten, wegen der durchschnittlich geringeren Beiträge ist aber das Fördervolumen nur etwa halb so gross. 2016 vergab der SNF zum ersten Mal explizit Förderbeiträge an interdisziplinäre Forschung, was den Anteil der MINT-Disziplinen und Lebenswissenschaften etwas reduzierte.
+
+### Mehr Fördermittel für Forscherinnen
+
+Der Blick zurück bis 1991 zeigt, dass der Anteil der unterstützten Forscherinnen von 10% auf mehr als einen Drittel im Jahr 2021 angestiegen ist. Die Veränderungen sind konstant über die Zeit, ohne dass einzelne Jahre ins Auge stechen.   
+
+<div class="plot-box">
+<div class="plot-title">Bewilligte Förderbeiträge – Geschlecht der gesuchstellenden Person in Prozenten</div>
+
+```{r gender-grantee, out.width="100%", fig.height=6.5}
+# Create ggplot plot
+ggplot_plot <- yearly_gender_shares_1991_2021 %>%  
+  mutate(ResponsibleApplicantGender = 
+           if_else(ResponsibleApplicantGender == "f", 
+                   "Frau als verantwortliche Gesuchstellerin", 
+                   "Mann als verantwortlicher Gesuchsteller"),
+         ResponsibleApplicantGender = fct_relevel(
+           ResponsibleApplicantGender, 
+           c("Frau als verantwortliche Gesuchstellerin", 
+             "Mann als verantwortlicher Gesuchsteller"))) %>% 
+  ggplot(aes(x = year, y = freq, fill = fct_rev(ResponsibleApplicantGender), 
+             tooltip = paste0(year, ", ", ResponsibleApplicantGender, ": ", 
+                              round(freq * 100), "%"))) + 
+  # Hack: Add a geom_col under the interactive one, only to be able to provide
+  # correct looking legend items (round although bar chart), 
+  # geom_col_interactive does not take the argument 'key_glyph'
+  geom_col(width = 0.1, size = 0.1,
+           # Draw point instead of square symbol
+           key_glyph = draw_key_dotplot) +
+  # Add ggiraph column, don't show it in legend as we're using points (and not 
+  # squares) according to the style guide there (see hack before)
+  geom_col_interactive(show.legend = FALSE) + 
+  labs(x = NULL, y = NULL) + 
+  geom_text(aes(label = paste0(round(freq * 100), "%")), 
+            position = position_stack(vjust = 0.6), color = "white", 
+            size = 2.5, family = "Source Sans Pro") +
+  scale_x_reverse(breaks = seq(1991, 2021, 2)) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) + 
+  scale_fill_manual(values = rev(get_datastory_scheme(n_col = 2)), 
+                    guide = guide_legend(reverse = TRUE)) + 
+  get_datastory_theme() + 
+  coord_flip()
+
+# Create ggiraph object
+girafe(ggobj = ggplot_plot, 
+       height_svg = 6.5, 
+       options = list(
+         opts_toolbar(saveaspng = FALSE),
+         opts_hover(css = "fill:#F08262;stroke:white;"),
+         opts_tooltip(
+           css = get_ggiraph_tooltip_css(),
+           opacity = 0.8,
+           delay_mouseover = 0,
+           delay_mouseout = 0
+         )
+       ))
+```
+
+<div class="caption">
+Für die Jahreszuordnung der Daten 1991-2021 wurde (in Reihenfolge der Verfügbarkeit) verwendet: Jahr der Callentscheidung, Jahr des Gesuchentscheids, Jahr der Einreichung. Die Zahlen sind exklusive Nationale Forschungsschwerpunkte (NFS) und Übergangsmassnahmen für Horizon 2020. Für die Zuordnung der Beiträge 2002-2021 zu den Wissenschaftsgebieten wurde die Hauptdisziplin verwendet.
+</div>
+
+<div class="hide-mobile hide-tablet">
+<strong>Weiterführende Links</strong>
+<p>
+  <a href="https://www.snf.ch/de/otHGxR771A58l7BM/news/seit-70-jahren-investieren-wir-in-forschende-und-ihre-ideen" target="_blank" class="button-blue">News zum 70-jährigen Jubiläum</a>
+  <a href="https://www.snf.ch/de/SmhGfltIQkzzCxJc/seite/ueberuns/portraet/geschichte" target="_blank" class="button">Geschichte des SNF</a>
+</p>
+</div>
+
+<div class="hide-desktop">
+<strong>Weiterführende Links</strong>
+<p>
+  <a href="https://www.snf.ch/de/otHGxR771A58l7BM/news/seit-70-jahren-investieren-wir-in-forschende-und-ihre-ideen" target="_blank" class="button-blue">News zum 70-jährigen Jubiläum</a>
+  <br/><br/>
+  <a href="https://www.snf.ch/de/SmhGfltIQkzzCxJc/seite/ueberuns/portraet/geschichte" target="_blank" class="button">Geschichte des SNF</a>
+</p>
+</div>
+
+Daten, Text und Code dieser Datengeschichte sind <a href="https://github.com/snsf-data/70_years_snsf" target="_blank">auf Github verfügbar</a> und <a href="https://doi.org/10.46446/datastory.70-years-snsf-from-a-few-million-to-a-billion" target="_blank">auf Zenodo archiviert</a>. DOI: 10.46446/datastory.70-years-snsf-from-a-few-million-to-a-billion
+
+```{r prevent-internal-snsf-packages, include=FALSE}
+# Internal SNSF packages must not be used in data stories, as their
+# pre-processing functions are internal and the corporate design differs from
+# the data portal.
+if (any(c("snfverse", "snf.preprocessing", "snf.plot") %in% 
+        loadedNamespaces())) {
+  stop(glue(
+    "You must not use internal SNSF packages in data stories.",
+    " Please resort to snf.datastory."
+  ))
+}
+```
